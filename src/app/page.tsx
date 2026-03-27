@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { Star, Upload, AlertCircle } from "lucide-react";
 import useSWR from "swr";
 import { FilterBar } from "@/components/shared/filter-bar";
@@ -16,6 +17,7 @@ import { FindSimilarModal } from "@/components/reviews/find-similar-modal";
 import { ReviewFiltersInline } from "@/components/reviews/review-filters-inline";
 import { ReviewListSkeleton } from "@/components/reviews/review-list-skeleton";
 import { StatsSkeleton } from "@/components/reviews/stats-skeleton";
+import { ReplyGeneratorModal } from "@/components/ideation/reply-generator-modal";
 import { useSyncStatus } from "@/hooks/use-sync-status";
 import { useReviews } from "@/hooks/use-reviews";
 import { useReviewStats } from "@/hooks/use-review-stats";
@@ -24,14 +26,17 @@ import type { ReviewItem } from "@/hooks/use-reviews";
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 export default function ReviewsPage() {
+  const searchParams = useSearchParams();
+
   const [csvOpen, setCsvOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [starRating, setStarRating] = useState<number | null>(null);
   const [sentiment, setSentiment] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [category, setCategory] = useState<string | null>(() => searchParams.get("category"));
+  const [search, setSearch] = useState(() => searchParams.get("search") || "");
+  const [debouncedSearch, setDebouncedSearch] = useState(() => searchParams.get("search") || "");
   const [similarReview, setSimilarReview] = useState<ReviewItem | null>(null);
+  const [replyReview, setReplyReview] = useState<ReviewItem | null>(null);
 
   const { refresh: refreshSync } = useSyncStatus();
   const { stats, isLoading: statsLoading } = useReviewStats();
@@ -168,6 +173,7 @@ export default function ReviewsPage() {
                     review={review}
                     onCategoryClick={handleCategoryClick}
                     onFindSimilar={(r) => setSimilarReview(r)}
+                    onGenerateReply={(r) => setReplyReview(r)}
                   />
                 ))}
               </div>
@@ -195,6 +201,12 @@ export default function ReviewsPage() {
         onClose={() => setSimilarReview(null)}
         onCategoryClick={handleCategoryClick}
       />
+      {replyReview && (
+        <ReplyGeneratorModal
+          review={replyReview}
+          onClose={() => setReplyReview(null)}
+        />
+      )}
     </div>
   );
 }

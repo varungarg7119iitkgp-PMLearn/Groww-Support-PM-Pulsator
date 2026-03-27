@@ -22,6 +22,12 @@ const VALID_CATEGORIES = [
   "Security",
   "Onboarding",
   "Notifications",
+  "General Praise",
+  "Investment & Trading",
+  "Mutual Funds & SIP",
+  "Charges & Fees",
+  "Ease of Use",
+  "Reliability",
   "Others",
 ] as const;
 
@@ -52,21 +58,32 @@ function buildPrompt(reviews: ReviewForCategorization[]): string {
     )
     .join("\n");
 
-  return `You are a review classification engine for the Groww financial app. Analyze each review and return a JSON array.
+  return `You are a review classification engine for the Groww financial/investment app. Analyze each review and return a JSON array.
 
 For each review, determine:
 1. **sentiment**: exactly one of: "positive", "negative", "neutral"
    - 4-5 stars with positive text = "positive"
    - 1-2 stars or complaints = "negative"
    - 3 stars or mixed feedback = "neutral"
-2. **categories**: 1 to 3 categories from this exact list:
+2. **categories**: 1 to 3 categories from this EXACT list:
    ${VALID_CATEGORIES.join(", ")}
+
+Category guidance (Groww is a stock trading & mutual fund investment app):
+- "General Praise" — short positive reviews like "good", "nice", "best", "excellent", "awesome", "love it", "great app", emoji-only reviews, or any vague praise without specific topic
+- "Ease of Use" — reviews mentioning "easy", "simple", "user friendly", "convenient", "smooth", "intuitive"
+- "Investment & Trading" — mentions stocks, shares, trading, intraday, equity, IPO, F&O, options, derivatives
+- "Mutual Funds & SIP" — mentions mutual funds, SIP, NAV, fund redemption, portfolio
+- "Charges & Fees" — mentions brokerage, charges, fees, commission, hidden costs, pricing
+- "Reliability" — mentions trust, reliable, dependable, stable, consistent, safe platform
+- "UI/UX" — mentions design, interface, layout, navigation, look & feel, charts, dark mode
+- "Performance" — mentions speed, slow, lag, loading, fast, responsive, hang
+- "Others" — ONLY use when the review truly cannot fit ANY of the above categories. AVOID using "Others" as much as possible.
+
+CRITICAL: Do NOT default to "Others". Every review can be categorized. Short praise = "General Praise". Ease mentions = "Ease of Use". Investment talk = "Investment & Trading".
 
 Rules:
 - Return ONLY a valid JSON array, no markdown, no explanation, no code fences
 - Each element must have: { "index": <number>, "sentiment": "<string>", "categories": [<strings>] }
-- Use "Others" if no specific category fits
-- Short reviews like "good", "nice", "bad" should still be categorized by sentiment
 
 Reviews to classify:
 ${reviewEntries}
@@ -211,6 +228,75 @@ export async function categorizeUncategorizedReviews(
   if (!reviews || reviews.length === 0) {
     return { processed: 0, updated: 0, failed: 0 };
   }
+
+  let totalUpdated = 0;
+  let totalFailed = 0;
+
+  for (let i = 0; i < reviews.length; i += BATCH_SIZE) {
+    const batch = reviews.slice(i, i + BATCH_SIZE);
+    const results = await categorizeBatch(batch);
+
+    if (results.length > 0) {
+      const updated = await updateReviewsInDB(batch, results);
+      totalUpdated += updated;
+      totalFailed += batch.length - updated;
+    } else {
+      totalFailed += batch.length;
+    }
+
+    if (i + BATCH_SIZE < reviews.length) {
+      await sleep(INTER_BATCH_DELAY);
+    }
+  }
+
+  return {
+    processed: reviews.length,
+    updated: totalUpdated,
+    failed: totalFailed,
+  };
+}
+
+export async function recategorizeOthers(
+  limit: number = 400
+): Promise<{ processed: number; updated: number; failed: number }> {
+  const db = getSupabaseAdmin();
+
+  const othersCategory = await db
+    .from("categories")
+    .select("id")
+    .eq("slug", "others")
+    .single();
+
+  if (!othersCategory.data) {
+    return { processed: 0, updated: 0, failed: 0 };
+  }
+
+  const { data: othersJunctions } = await db
+    .from("review_categories")
+    .select("review_id")
+    .eq("category_id", othersCategory.data.id)
+    .limit(limit);
+
+  const reviewIds = (othersJunctions ?? []).map((r: { review_id: string }) => r.review_id);
+  if (reviewIds.length === 0) {
+    return { processed: 0, updated: 0, failed: 0 };
+  }
+
+  const { data: reviews, error } = await db
+    .from("reviews")
+    .select("id, sanitized_text, star_rating")
+    .in("id", reviewIds);
+
+  if (error || !reviews || reviews.length === 0) {
+    return { processed: 0, updated: 0, failed: 0 };
+  }
+
+  // Remove old "Others" category assignments for these reviews
+  await db
+    .from("review_categories")
+    .delete()
+    .eq("category_id", othersCategory.data.id)
+    .in("review_id", reviewIds);
 
   let totalUpdated = 0;
   let totalFailed = 0;

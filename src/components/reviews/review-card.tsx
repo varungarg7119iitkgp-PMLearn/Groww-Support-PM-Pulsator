@@ -12,6 +12,7 @@ import {
   Tag,
   ChevronDown,
   ChevronUp,
+  MessageSquare,
 } from "lucide-react";
 import type { ReviewItem } from "@/hooks/use-reviews";
 
@@ -19,6 +20,7 @@ interface ReviewCardProps {
   review: ReviewItem;
   onCategoryClick?: (slug: string) => void;
   onFindSimilar?: (review: ReviewItem) => void;
+  onGenerateReply?: (review: ReviewItem) => void;
 }
 
 function SentimentBadge({ sentiment }: { sentiment: string }) {
@@ -65,7 +67,7 @@ function StarRating({ rating }: { rating: number }) {
   );
 }
 
-export function ReviewCard({ review, onCategoryClick, onFindSimilar }: ReviewCardProps) {
+export function ReviewCard({ review, onCategoryClick, onFindSimilar, onGenerateReply }: ReviewCardProps) {
   const [expanded, setExpanded] = useState(false);
   const textLimit = 200;
   const text = review.sanitized_text || review.review_text;
@@ -163,13 +165,24 @@ export function ReviewCard({ review, onCategoryClick, onFindSimilar }: ReviewCar
             </span>
           )}
         </div>
-        <button
-          onClick={() => onFindSimilar?.(review)}
-          className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] transition-colors"
-        >
-          <Search className="h-3 w-3" />
-          Find Similar
-        </button>
+        <div className="flex items-center gap-1">
+          {onGenerateReply && (
+            <button
+              onClick={() => onGenerateReply(review)}
+              className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] transition-colors"
+            >
+              <MessageSquare className="h-3 w-3" />
+              Reply
+            </button>
+          )}
+          <button
+            onClick={() => onFindSimilar?.(review)}
+            className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-bg-hover)] transition-colors"
+          >
+            <Search className="h-3 w-3" />
+            Find Similar
+          </button>
+        </div>
       </div>
     </div>
   );
