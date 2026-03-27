@@ -5,7 +5,6 @@ import {
   Cloud,
   FileText,
   Lightbulb,
-  MoreHorizontal,
   Zap,
   type LucideIcon,
 } from "lucide-react";
@@ -44,15 +43,7 @@ export const MOBILE_NAV_TABS: MobileNavTab[] = [
     ],
   },
   { id: "ideation", label: "Ideation", href: "/ideation", icon: Zap },
-  {
-    id: "more",
-    label: "More",
-    href: "#",
-    icon: MoreHorizontal,
-    children: [
-      { id: "reporting", label: "Reporting", href: "/reporting", icon: FileText },
-    ],
-  },
+  { id: "reporting", label: "Reporting", href: "/reporting", icon: FileText },
 ];
 
 export const FILTER_TIME_PERIODS = [

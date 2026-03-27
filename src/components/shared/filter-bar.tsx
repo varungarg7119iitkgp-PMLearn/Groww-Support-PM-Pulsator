@@ -1,132 +1,74 @@
 "use client";
 
 import { useState } from "react";
-import { Filter, X, Calendar } from "lucide-react";
+import { Filter, X } from "lucide-react";
 import { useFilters } from "@/context/filter-context";
 import { FILTER_PLATFORMS, FILTER_TIME_PERIODS } from "@/constants/navigation";
 
 export function FilterBar() {
-  const { filters, setPlatform, setTimePeriod, setCustomDateRange, resetFilters } =
-    useFilters();
+  const { filters, setPlatform, setTimePeriod, resetFilters } = useFilters();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [dateFrom, setDateFrom] = useState(filters.customDateFrom ?? "");
-  const [dateTo, setDateTo] = useState(filters.customDateTo ?? "");
-  const [dateError, setDateError] = useState("");
-
-  const handleApplyCustomDate = () => {
-    if (!dateFrom || !dateTo) {
-      setDateError("Both dates are required");
-      return;
-    }
-    if (new Date(dateFrom) > new Date(dateTo)) {
-      setDateError("Start date must be before end date");
-      return;
-    }
-    setDateError("");
-    setCustomDateRange(dateFrom, dateTo);
-    setMobileOpen(false);
-  };
-
-  const handleResetCustomDate = () => {
-    setDateFrom("");
-    setDateTo("");
-    setDateError("");
-    setTimePeriod("last_30");
-  };
 
   const filterContent = (
-    <div className="space-y-4">
-      {/* Platform Filter */}
-      <div>
-        <label className="mb-2 block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Platform
-        </label>
-        <div className="flex items-center gap-1">
-          {FILTER_PLATFORMS.map((p) => (
-            <button
-              key={p.id}
-              onClick={() => {
-                setPlatform(p.id as "all" | "android" | "ios");
-                if (mobileOpen) setMobileOpen(false);
-              }}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
-                filters.platform === p.id
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "bg-[var(--color-bg-main)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-4">
+        <div>
+          <label className="mb-2 block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
+            Platform
+          </label>
+          <div className="flex items-center gap-1">
+            {FILTER_PLATFORMS.map((p) => (
+              <button
+                key={p.id}
+                onClick={() => {
+                  setPlatform(p.id as "all" | "android" | "ios");
+                  if (mobileOpen) setMobileOpen(false);
+                }}
+                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-all ${
+                  filters.platform === p.id
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "bg-[var(--color-bg-main)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="min-w-[320px] flex-1">
+          <label className="mb-2 block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
+            Time Period
+          </label>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {FILTER_TIME_PERIODS.filter((t) => t.id !== "custom").map((t) => (
+              <button
+                key={t.id}
+                onClick={() => {
+                  setTimePeriod(t.id as any);
+                  if (mobileOpen) setMobileOpen(false);
+                }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
+                  filters.timePeriod === t.id
+                    ? "bg-[var(--color-accent)] text-white"
+                    : "bg-[var(--color-bg-main)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
-
-      {/* Time Period */}
-      <div>
-        <label className="mb-2 block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Time Period
-        </label>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {FILTER_TIME_PERIODS.filter((t) => t.id !== "custom").map((t) => (
-            <button
-              key={t.id}
-              onClick={() => {
-                setTimePeriod(t.id as any);
-                if (mobileOpen) setMobileOpen(false);
-              }}
-              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all ${
-                filters.timePeriod === t.id
-                  ? "bg-[var(--color-accent)] text-white"
-                  : "bg-[var(--color-bg-main)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Custom Date Range */}
-      <div>
-        <label className="mb-2 block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide">
-          Custom Date Range
-        </label>
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
-            <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border bg-[var(--color-bg-main)] py-1.5 pl-8 pr-3 text-xs text-[var(--color-text-primary)]"
-            />
-          </div>
-          <span className="text-xs text-[var(--color-text-secondary)]">to</span>
-          <div className="relative">
-            <Calendar className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]" />
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border bg-[var(--color-bg-main)] py-1.5 pl-8 pr-3 text-xs text-[var(--color-text-primary)]"
-            />
-          </div>
-          <button
-            onClick={handleApplyCustomDate}
-            className="rounded-lg bg-[var(--color-accent)] px-3 py-1.5 text-xs font-medium text-white hover:bg-[var(--color-accent-hover)] transition-colors"
-          >
-            Apply
-          </button>
-          <button
-            onClick={handleResetCustomDate}
-            className="rounded-lg border px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-          >
-            Reset
-          </button>
-        </div>
-        {dateError && (
-          <p className="mt-1 text-xs text-[var(--color-negative)]">{dateError}</p>
-        )}
+      <div className="flex justify-end">
+        <button
+          onClick={() => {
+            resetFilters();
+            if (mobileOpen) setMobileOpen(false);
+          }}
+          className="rounded-lg border px-3 py-1.5 text-xs font-medium text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+        >
+          Reset
+        </button>
       </div>
     </div>
   );

@@ -1,9 +1,78 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateContent } from "@/lib/gemini";
 import { getSupabaseAdmin } from "@/lib/supabase-server";
+import { GROWW_APP } from "@/constants/groww";
 
 export const maxDuration = 120;
 export const dynamic = "force-dynamic";
+
+function sanitizeJsonControlChars(input: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+
+    if (inString) {
+      if (escaped) {
+        out += ch;
+        escaped = false;
+        continue;
+      }
+      if (ch === "\\") {
+        out += ch;
+        escaped = true;
+        continue;
+      }
+      if (ch === "\"") {
+        out += ch;
+        inString = false;
+        continue;
+      }
+      if (ch === "\n") {
+        out += "\\n";
+        continue;
+      }
+      if (ch === "\r") {
+        out += "\\r";
+        continue;
+      }
+      if (ch === "\t") {
+        out += "\\t";
+        continue;
+      }
+      const code = ch.charCodeAt(0);
+      if (code >= 0 && code < 32) {
+        out += " ";
+        continue;
+      }
+      out += ch;
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+    }
+    out += ch;
+  }
+
+  return out;
+}
+
+function parseIdeasJson(responseText: string) {
+  let cleaned = responseText.trim();
+  if (cleaned.startsWith("```")) {
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const sanitized = sanitizeJsonControlChars(cleaned);
+    return JSON.parse(sanitized);
+  }
+}
 
 function buildDateFilter(timePeriod: string, dateFrom?: string, dateTo?: string) {
   const now = new Date();
@@ -62,6 +131,7 @@ Instructions:
 3. Return 3-7 themes, sorted by impact (highest first)
 4. Do NOT include any PII or user names
 5. Be specific to Groww's domain (trading, mutual funds, payments, KYC, etc.)
+6. Explicitly leverage "Feature Request" patterns and convert them into concrete, prioritized product suggestions
 
 Return ONLY a valid JSON array with this structure (no markdown, no code fences):
 [
@@ -76,27 +146,48 @@ Return ONLY a valid JSON array with this structure (no markdown, no code fences)
 JSON array:`;
 }
 
+async function resolveAppId() {
+  const db = getSupabaseAdmin();
+
+  const { data: growwApp } = await db
+    .from("apps")
+    .select("id")
+    .eq("android_bundle_id", GROWW_APP.androidBundleId)
+    .maybeSingle();
+
+  if (growwApp?.id) return growwApp.id;
+
+  const { data: anyApp } = await db
+    .from("apps")
+    .select("id")
+    .limit(1)
+    .maybeSingle();
+
+  return anyApp?.id ?? null;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const { platform, timePeriod, dateFrom, dateTo } = body;
 
     const db = getSupabaseAdmin();
-
-    const { data: app } = await db
-      .from("apps")
-      .select("id")
-      .eq("platform", "android")
-      .single();
-
-    if (!app) {
-      return NextResponse.json({ error: "No app configured" }, { status: 404 });
+    const appId = await resolveAppId();
+    if (!appId) {
+      return NextResponse.json(
+        {
+          ideas: [],
+          message: "No app configured yet. Please run review sync first.",
+          totalAnalyzed: 0,
+        },
+        { status: 200 }
+      );
     }
 
     let query = db
       .from("reviews")
       .select("id, sanitized_text, star_rating, sentiment")
-      .eq("app_id", app.id)
+      .eq("app_id", appId)
       .in("sentiment", ["negative", "neutral"])
       .order("review_date", { ascending: false })
       .limit(100);
@@ -113,7 +204,50 @@ export async function POST(request: NextRequest) {
     if (startDate) query = query.gte("review_date", startDate);
     if (endDate) query = query.lte("review_date", endDate);
 
-    const { data: reviews } = await query;
+    const { data: baseReviews } = await query;
+
+    const { data: featureCategory } = await db
+      .from("categories")
+      .select("id")
+      .eq("slug", "feature-request")
+      .maybeSingle();
+
+    let featureReviews: { id: string; sanitized_text: string; star_rating: number; sentiment: string }[] = [];
+
+    if (featureCategory?.id) {
+      let featureIdsQuery = db
+        .from("review_categories")
+        .select("review_id")
+        .eq("category_id", featureCategory.id)
+        .limit(150);
+
+      const { data: featureReviewIds } = await featureIdsQuery;
+      const ids = (featureReviewIds ?? []).map((r: { review_id: string }) => r.review_id);
+
+      if (ids.length > 0) {
+        let featureQuery = db
+          .from("reviews")
+          .select("id, sanitized_text, star_rating, sentiment")
+          .eq("app_id", appId)
+          .in("id", ids)
+          .order("review_date", { ascending: false })
+          .limit(60);
+
+        if (platform && platform !== "all") {
+          featureQuery = featureQuery.eq("platform", platform);
+        }
+        if (startDate) featureQuery = featureQuery.gte("review_date", startDate);
+        if (endDate) featureQuery = featureQuery.lte("review_date", endDate);
+
+        const { data } = await featureQuery;
+        featureReviews = data ?? [];
+      }
+    }
+
+    const reviewMap = new Map<string, { id: string; sanitized_text: string; star_rating: number; sentiment: string }>();
+    for (const r of baseReviews ?? []) reviewMap.set(r.id, r);
+    for (const r of featureReviews) reviewMap.set(r.id, r);
+    const reviews = Array.from(reviewMap.values()).slice(0, 140);
 
     if (!reviews || reviews.length < 5) {
       return NextResponse.json({
@@ -158,12 +292,7 @@ export async function POST(request: NextRequest) {
     const prompt = buildIdeasPrompt(enriched);
     const responseText = await generateContent(prompt);
 
-    let cleaned = responseText.trim();
-    if (cleaned.startsWith("```")) {
-      cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "").replace(/\n?```\s*$/, "");
-    }
-
-    const ideas = JSON.parse(cleaned);
+    const ideas = parseIdeasJson(responseText);
 
     return NextResponse.json({
       ideas,

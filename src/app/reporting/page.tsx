@@ -1,7 +1,7 @@
 "use client";
 
-import { FileText } from "lucide-react";
-import { EmptyState } from "@/components/shared/empty-state";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { ReportingWorkflow } from "@/components/reporting/reporting-workflow";
 
 export default function ReportingPage() {
   return (
@@ -15,12 +15,8 @@ export default function ReportingPage() {
         </p>
       </div>
 
-      <EmptyState
-        icon={FileText}
-        title="Reporting workflows coming soon"
-        description="This is where you'll generate Weekly Pulses, Fee Explainers, and Morning Brew email drafts — all with approval-gated workflows."
-        action="Available in Phase 8"
-      />
+      <FilterBar />
+      <ReportingWorkflow />
     </div>
   );
 }
