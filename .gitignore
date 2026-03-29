@@ -22,12 +22,3 @@ out/
 .DS_Store
 Thumbs.db
 
-# Local reference files — never commit
-Only Local PreWork/
-Niyo Review Hub.html
-Niyo Review Hub_files/
-Pers-Proj-requirements.md
-Pers-Proj-ui-ux-specifications.md
-Screenshot 2026-03-26*
-screenshot-*.png
-minions-construction.png
